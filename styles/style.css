@@ -448,6 +448,9 @@ input[type="range"]::-moz-range-thumb {
 
 /* 3D Cube Section */
 .cube-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
     margin-top: 40px;
     margin-bottom: 40px;
 }
@@ -494,6 +497,7 @@ input[type="range"]::-moz-range-thumb {
 /* Mobile styles for cube and footer */
 @media (max-width: 800px) {
     .cube-section {
+        gap: 10px;
         margin-top: 20px;
         margin-bottom: 20px;
     }

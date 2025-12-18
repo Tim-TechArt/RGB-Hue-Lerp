@@ -600,12 +600,19 @@ function getDotPositions(mode) {
             y: posA.y + (posB.y - posA.y) * t
         };
     } else {
-        // HSV: arc interpolation
+        // HSV: arc interpolation - must match hueDirection
         let hueA = hA;
         let hueB = hB;
-        const hueDiff = hueB - hueA;
-        if (hueDiff > 0.5) hueA += 1;
-        else if (hueDiff < -0.5) hueB += 1;
+
+        if (hueDirection === 'shortest') {
+            const hueDiff = hueB - hueA;
+            if (hueDiff > 0.5) hueA += 1;
+            else if (hueDiff < -0.5) hueB += 1;
+        } else if (hueDirection === 'clockwise') {
+            if (hueB >= hueA) hueA += 1;
+        } else if (hueDirection === 'counter') {
+            if (hueB <= hueA) hueB += 1;
+        }
 
         const h = ((hueA + (hueB - hueA) * t) % 1 + 1) % 1;
         const s = sA + (sB - sA) * t;
@@ -671,12 +678,19 @@ function getTFromPosition(canvas, event) {
         const proj = (apX * abX + apY * abY) / (len * len);
         return Math.max(0, Math.min(1, proj));
     } else {
-        // HSV: calculate from angle
+        // HSV: calculate from angle - must match hueDirection
         let hueA = hA;
         let hueB = hB;
-        const hueDiff = hueB - hueA;
-        if (hueDiff > 0.5) hueA += 1;
-        else if (hueDiff < -0.5) hueB += 1;
+
+        if (hueDirection === 'shortest') {
+            const hueDiff = hueB - hueA;
+            if (hueDiff > 0.5) hueA += 1;
+            else if (hueDiff < -0.5) hueB += 1;
+        } else if (hueDirection === 'clockwise') {
+            if (hueB >= hueA) hueA += 1;
+        } else if (hueDirection === 'counter') {
+            if (hueB <= hueA) hueB += 1;
+        }
 
         const angle = Math.atan2(y, x) / (2 * Math.PI) + 0.5;
         let pointHue = angle;
@@ -863,11 +877,16 @@ update();
 // ============================================
 
 const cubeCanvas = document.getElementById('cubeCanvas');
-let cubeGl, cubeProgram, cubePointProgram;
-let cubeRotationX = -0.5;
-let cubeRotationY = 0.7;
+let cubeGl, cubeProgram, cubePointProgram, cubeSolidProgram;
+let cubeRotationX = -3.13;
+let cubeRotationY = 2.21;
+let cubeZoom = 2.91; // Camera distance (smaller = closer)
+const ZOOM_MIN = 2.0;
+const ZOOM_MAX = 8.0;
 let isDraggingCube = false;
 let lastCubeMouseX, lastCubeMouseY;
+let lastPinchDistance = 0;
+
 
 function initCube() {
     cubeGl = cubeCanvas.getContext('webgl');
@@ -896,28 +915,83 @@ function initCube() {
         }
     `;
 
-    // Point shader
+    // Point shader with optional white glow
     const pointVS = `
         attribute vec3 a_position;
         attribute vec3 a_color;
         attribute float a_size;
+        attribute float a_hasGlow;
         uniform mat4 u_matrix;
         varying vec3 v_color;
+        varying float v_hasGlow;
         void main() {
             gl_Position = u_matrix * vec4(a_position, 1.0);
             gl_PointSize = a_size;
             v_color = a_color;
+            v_hasGlow = a_hasGlow;
         }
     `;
 
     const pointFS = `
         precision mediump float;
         varying vec3 v_color;
+        varying float v_hasGlow;
         void main() {
             float dist = length(gl_PointCoord - vec2(0.5));
             if (dist > 0.5) discard;
+
             float alpha = smoothstep(0.5, 0.35, dist);
-            gl_FragColor = vec4(v_color, alpha);
+            vec3 finalColor = v_color;
+
+            // Subtle white glow ring for highlighted points
+            if (v_hasGlow > 0.5) {
+                float ringCenter = 0.42;
+                float ringWidth = 0.08;
+                float glowStrength = 1.0 - smoothstep(0.0, ringWidth, abs(dist - ringCenter));
+                glowStrength *= 0.5;
+                finalColor = mix(v_color, vec3(1.0), glowStrength);
+            }
+
+            gl_FragColor = vec4(finalColor, alpha);
+        }
+    `;
+
+    // Solid cube shader with clipping plane - position IS the color (RGB cube)
+    const solidCubeVS = `
+        attribute vec3 a_position;
+        uniform mat4 u_matrix;
+        varying vec3 v_color;
+        varying vec3 v_position;
+        void main() {
+            gl_Position = u_matrix * vec4(a_position, 1.0);
+            v_color = a_position; // RGB = position in cube
+            v_position = a_position; // Pass position for clipping
+        }
+    `;
+
+    const solidCubeFS = `
+        precision mediump float;
+        varying vec3 v_color;
+        varying vec3 v_position;
+        uniform vec3 u_planePoint;
+        uniform vec3 u_planeNormal;
+        uniform float u_clipEnabled;
+        uniform float u_clipToCube;
+        void main() {
+            // Clip to cube bounds (0-1 range)
+            if (u_clipToCube > 0.5) {
+                if (v_position.x < 0.0 || v_position.x > 1.0 ||
+                    v_position.y < 0.0 || v_position.y > 1.0 ||
+                    v_position.z < 0.0 || v_position.z > 1.0) {
+                    discard;
+                }
+            }
+            // Clip fragments on one side of the plane
+            if (u_clipEnabled > 0.5) {
+                float dist = dot(v_position - u_planePoint, u_planeNormal);
+                if (dist > 0.0) discard;
+            }
+            gl_FragColor = vec4(v_color, 1.0);
         }
     `;
 
@@ -946,19 +1020,22 @@ function initCube() {
 
     cubeProgram = createProgram(cubeGl, lineVS, lineFS);
     cubePointProgram = createProgram(cubeGl, pointVS, pointFS);
+    cubeSolidProgram = createProgram(cubeGl, solidCubeVS, solidCubeFS);
 
     cubeGl.enable(cubeGl.BLEND);
     cubeGl.blendFunc(cubeGl.SRC_ALPHA, cubeGl.ONE_MINUS_SRC_ALPHA);
 }
 
+// Column-major matrix multiplication for WebGL
 function multiplyMatrices(a, b) {
     const result = new Float32Array(16);
-    for (let i = 0; i < 4; i++) {
-        for (let j = 0; j < 4; j++) {
-            result[i * 4 + j] = 0;
+    for (let col = 0; col < 4; col++) {
+        for (let row = 0; row < 4; row++) {
+            let sum = 0;
             for (let k = 0; k < 4; k++) {
-                result[i * 4 + j] += a[i * 4 + k] * b[k * 4 + j];
+                sum += a[row + k * 4] * b[k + col * 4];
             }
+            result[row + col * 4] = sum;
         }
     }
     return result;
@@ -994,6 +1071,16 @@ function rotationYMatrix(angle) {
     ]);
 }
 
+function rotationZMatrix(angle) {
+    const c = Math.cos(angle), s = Math.sin(angle);
+    return new Float32Array([
+        c, s, 0, 0,
+        -s, c, 0, 0,
+        0, 0, 1, 0,
+        0, 0, 0, 1
+    ]);
+}
+
 function translationMatrix(x, y, z) {
     return new Float32Array([
         1, 0, 0, 0,
@@ -1001,6 +1088,132 @@ function translationMatrix(x, y, z) {
         0, 0, 1, 0,
         x, y, z, 1
     ]);
+}
+
+// Vector math helpers for plane calculation
+function vec3Cross(a, b) {
+    return [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0]
+    ];
+}
+
+function vec3Normalize(v) {
+    const len = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+    if (len === 0) return [0, 0, 0];
+    return [v[0] / len, v[1] / len, v[2] / len];
+}
+
+function vec3Sub(a, b) {
+    return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+}
+
+function vec3Add(a, b) {
+    return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+}
+
+function vec3Scale(v, s) {
+    return [v[0] * s, v[1] * s, v[2] * s];
+}
+
+function vec3Dot(a, b) {
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+// Generate solid cube faces (6 faces × 2 triangles × 3 vertices = 36 vertices)
+// Each vertex position IS the RGB color
+function generateSolidCubeVertices() {
+    // Cube corners: (r, g, b) where each is 0 or 1
+    const corners = [
+        [0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], // Front face (z=0)
+        [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]  // Back face (z=1)
+    ];
+
+    // Define 6 faces as indices into corners array
+    // Each face has 4 corners, we split into 2 triangles
+    const faces = [
+        [0, 1, 2, 3], // Front (z=0): black, red, yellow, green
+        [5, 4, 7, 6], // Back (z=1): magenta, blue, cyan, white
+        [4, 0, 3, 7], // Left (x=0): blue, black, green, cyan
+        [1, 5, 6, 2], // Right (x=1): red, magenta, white, yellow
+        [3, 2, 6, 7], // Top (y=1): green, yellow, white, cyan
+        [4, 5, 1, 0]  // Bottom (y=0): blue, magenta, red, black
+    ];
+
+    const vertices = [];
+
+    for (const face of faces) {
+        const c0 = corners[face[0]];
+        const c1 = corners[face[1]];
+        const c2 = corners[face[2]];
+        const c3 = corners[face[3]];
+
+        // Triangle 1: c0, c1, c2
+        vertices.push(...c0, ...c1, ...c2);
+        // Triangle 2: c0, c2, c3
+        vertices.push(...c0, ...c2, ...c3);
+    }
+
+    return new Float32Array(vertices);
+}
+
+// Calculate the plane normal and perpendicular direction for the cross-section
+function calculatePlaneVectors(rgbA, rgbB) {
+    const abDir = vec3Normalize(vec3Sub(rgbB, rgbA));
+
+    // Find a perpendicular direction
+    let up = [0, 1, 0];
+    let perpDir = vec3Cross(abDir, up);
+    const perpLen = Math.sqrt(perpDir[0]**2 + perpDir[1]**2 + perpDir[2]**2);
+    if (perpLen < 0.001) {
+        up = [1, 0, 0];
+        perpDir = vec3Cross(abDir, up);
+    }
+    perpDir = vec3Normalize(perpDir);
+
+    // The plane normal is perpendicular to both abDir and perpDir
+    // This gives us a plane that contains the A-B line
+    const normal = vec3Normalize(vec3Cross(abDir, perpDir));
+
+    return { abDir, perpDir, normal };
+}
+
+// Generate cross-section plane vertices (fills the cut surface)
+function generateCrossSectionVertices(rgbA, rgbB, resolution = 32) {
+    const vertices = [];
+    const { abDir, perpDir } = calculatePlaneVectors(rgbA, rgbB);
+
+    // Calculate midpoint and length of A-B
+    const mid = vec3Scale(vec3Add(rgbA, rgbB), 0.5);
+
+    // Extend plane to cover the cube (sqrt(3) ≈ 1.73 is diagonal of unit cube)
+    const extent = 1.0;
+
+    for (let i = 0; i < resolution; i++) {
+        for (let j = 0; j < resolution; j++) {
+            // Parameters along each direction
+            const tAB1 = -extent + (i / resolution) * (extent * 2);
+            const tAB2 = -extent + ((i + 1) / resolution) * (extent * 2);
+            const tPerp1 = -extent + (j / resolution) * (extent * 2);
+            const tPerp2 = -extent + ((j + 1) / resolution) * (extent * 2);
+
+            // Calculate 4 corners
+            const p00 = vec3Add(vec3Add(mid, vec3Scale(abDir, tAB1)), vec3Scale(perpDir, tPerp1));
+            const p10 = vec3Add(vec3Add(mid, vec3Scale(abDir, tAB2)), vec3Scale(perpDir, tPerp1));
+            const p01 = vec3Add(vec3Add(mid, vec3Scale(abDir, tAB1)), vec3Scale(perpDir, tPerp2));
+            const p11 = vec3Add(vec3Add(mid, vec3Scale(abDir, tAB2)), vec3Scale(perpDir, tPerp2));
+
+            // Only include vertices that are inside the cube (0-1 range)
+            const inCube = (p) => p[0] >= 0 && p[0] <= 1 && p[1] >= 0 && p[1] <= 1 && p[2] >= 0 && p[2] <= 1;
+
+            // Add triangles (we'll clip in shader or just include all - clipping handles it)
+            vertices.push(...p00, ...p10, ...p11);
+            vertices.push(...p00, ...p11, ...p01);
+        }
+    }
+
+    return new Float32Array(vertices);
 }
 
 function renderCube() {
@@ -1013,13 +1226,17 @@ function renderCube() {
     cubeCanvas.height = rect.height * dpr;
     gl.viewport(0, 0, cubeCanvas.width, cubeCanvas.height);
 
+    // Enable depth testing for proper 3D rendering
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.LEQUAL);
+
     gl.clearColor(0.043, 0.051, 0.063, 1.0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     // Build transformation matrix
     const aspect = cubeCanvas.width / cubeCanvas.height;
     const proj = perspectiveMatrix(Math.PI / 4, aspect, 0.1, 100);
-    const view = translationMatrix(0, 0, -4);
+    const view = translationMatrix(0, 0, -cubeZoom);
     const rotX = rotationXMatrix(cubeRotationX);
     const rotY = rotationYMatrix(cubeRotationY);
     const center = translationMatrix(-0.5, -0.5, -0.5);
@@ -1029,8 +1246,50 @@ function renderCube() {
     matrix = multiplyMatrices(matrix, rotX);
     matrix = multiplyMatrices(matrix, center);
 
-    // Cube edges (12 edges, 24 vertices)
-    // Cube corners with RGB colors: (r,g,b) = position
+    // Get colors A and B as RGB 0-1
+    const rgbA = [colorA[0] / 255, colorA[1] / 255, colorA[2] / 255];
+    const rgbB = [colorB[0] / 255, colorB[1] / 255, colorB[2] / 255];
+
+    // Calculate plane vectors for clipping
+    const { normal: planeNormal } = calculatePlaneVectors(rgbA, rgbB);
+    const planeMid = vec3Scale(vec3Add(rgbA, rgbB), 0.5);
+
+    // Draw solid cube with clipping (disable blending for opaque colors)
+    gl.disable(gl.BLEND);
+    if (cubeSolidProgram) {
+        gl.useProgram(cubeSolidProgram);
+
+        const solidVertices = generateSolidCubeVertices();
+        const solidBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, solidBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, solidVertices, gl.STATIC_DRAW);
+
+        const solidPosLoc = gl.getAttribLocation(cubeSolidProgram, 'a_position');
+        gl.enableVertexAttribArray(solidPosLoc);
+        gl.vertexAttribPointer(solidPosLoc, 3, gl.FLOAT, false, 0, 0);
+
+        const solidMatrixLoc = gl.getUniformLocation(cubeSolidProgram, 'u_matrix');
+        gl.uniformMatrix4fv(solidMatrixLoc, false, matrix);
+
+        const planePointLoc = gl.getUniformLocation(cubeSolidProgram, 'u_planePoint');
+        gl.uniform3fv(planePointLoc, planeMid);
+
+        const planeNormalLoc = gl.getUniformLocation(cubeSolidProgram, 'u_planeNormal');
+        gl.uniform3fv(planeNormalLoc, planeNormal);
+
+        const clipEnabledLoc = gl.getUniformLocation(cubeSolidProgram, 'u_clipEnabled');
+        const clipToCubeLoc = gl.getUniformLocation(cubeSolidProgram, 'u_clipToCube');
+
+        gl.uniform1f(clipEnabledLoc, 1.0); // Enable plane clipping
+        gl.uniform1f(clipToCubeLoc, 0.0);  // Cube faces are already bounded
+
+        gl.drawArrays(gl.TRIANGLES, 0, 36);
+
+        gl.uniform1f(clipEnabledLoc, 0.0);
+        gl.uniform1f(clipToCubeLoc, 0.0);
+    }
+
+    // Draw cube edges (with depth test - occluded by cube)
     const cubeEdges = [
         // Bottom face edges
         0,0,0, 1,0,0,   1,0,0, 1,0,1,   1,0,1, 0,0,1,   0,0,1, 0,0,0,
@@ -1039,11 +1298,8 @@ function renderCube() {
         // Vertical edges
         0,0,0, 0,1,0,   1,0,0, 1,1,0,   1,0,1, 1,1,1,   0,0,1, 0,1,1
     ];
+    const edgeColors = cubeEdges.slice();
 
-    // Colors match positions (RGB cube)
-    const edgeColors = cubeEdges.slice(); // Same as positions for RGB cube
-
-    // Draw cube edges
     gl.useProgram(cubeProgram);
 
     const posBuffer = gl.createBuffer();
@@ -1051,6 +1307,9 @@ function renderCube() {
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cubeEdges), gl.STATIC_DRAW);
 
     const posLoc = gl.getAttribLocation(cubeProgram, 'a_position');
+    const colorLoc = gl.getAttribLocation(cubeProgram, 'a_color');
+    const matrixLoc = gl.getUniformLocation(cubeProgram, 'u_matrix');
+
     gl.enableVertexAttribArray(posLoc);
     gl.vertexAttribPointer(posLoc, 3, gl.FLOAT, false, 0, 0);
 
@@ -1058,66 +1317,16 @@ function renderCube() {
     gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(edgeColors), gl.STATIC_DRAW);
 
-    const colorLoc = gl.getAttribLocation(cubeProgram, 'a_color');
     gl.enableVertexAttribArray(colorLoc);
     gl.vertexAttribPointer(colorLoc, 3, gl.FLOAT, false, 0, 0);
 
-    const matrixLoc = gl.getUniformLocation(cubeProgram, 'u_matrix');
     gl.uniformMatrix4fv(matrixLoc, false, matrix);
 
+    // Keep depth test enabled - edges only show on visible surfaces
     gl.drawArrays(gl.LINES, 0, 24);
 
-    // Draw points A, B, and T
-    gl.useProgram(cubePointProgram);
-
-    const rgbA = [colorA[0] / 255, colorA[1] / 255, colorA[2] / 255];
-    const rgbB = [colorB[0] / 255, colorB[1] / 255, colorB[2] / 255];
-    const rgbT = [
-        rgbA[0] + (rgbB[0] - rgbA[0]) * t,
-        rgbA[1] + (rgbB[1] - rgbA[1]) * t,
-        rgbA[2] + (rgbB[2] - rgbA[2]) * t
-    ];
-
-    const pointPositions = [
-        ...rgbA, ...rgbB, ...rgbT
-    ];
-    const pointColors = [
-        ...rgbA, ...rgbB, ...rgbT
-    ];
-    const pointSizes = [20.0 * dpr, 20.0 * dpr, 25.0 * dpr];
-
-    const pointPosBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, pointPosBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pointPositions), gl.STATIC_DRAW);
-
-    const pointPosLoc = gl.getAttribLocation(cubePointProgram, 'a_position');
-    gl.enableVertexAttribArray(pointPosLoc);
-    gl.vertexAttribPointer(pointPosLoc, 3, gl.FLOAT, false, 0, 0);
-
-    const pointColorBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, pointColorBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pointColors), gl.STATIC_DRAW);
-
-    const pointColorLoc = gl.getAttribLocation(cubePointProgram, 'a_color');
-    gl.enableVertexAttribArray(pointColorLoc);
-    gl.vertexAttribPointer(pointColorLoc, 3, gl.FLOAT, false, 0, 0);
-
-    const pointSizeBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, pointSizeBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pointSizes), gl.STATIC_DRAW);
-
-    const pointSizeLoc = gl.getAttribLocation(cubePointProgram, 'a_size');
-    gl.enableVertexAttribArray(pointSizeLoc);
-    gl.vertexAttribPointer(pointSizeLoc, 1, gl.FLOAT, false, 0, 0);
-
-    const pointMatrixLoc = gl.getUniformLocation(cubePointProgram, 'u_matrix');
-    gl.uniformMatrix4fv(pointMatrixLoc, false, matrix);
-
-    gl.drawArrays(gl.POINTS, 0, 3);
-
-    // Draw line from A to B
-    gl.useProgram(cubeProgram);
-
+    // Draw line from A to B (no depth write - won't interfere with T point)
+    gl.depthMask(false);
     const linePositions = [...rgbA, ...rgbB];
     const lineColors = [...rgbA, ...rgbB];
 
@@ -1133,6 +1342,106 @@ function renderCube() {
 
     gl.lineWidth(3.0);
     gl.drawArrays(gl.LINES, 0, 2);
+    gl.depthMask(true);
+
+    // Draw cross-section plane (no depth write - doesn't occlude points)
+    if (cubeSolidProgram) {
+        gl.useProgram(cubeSolidProgram);
+        gl.depthMask(false); // Don't write to depth buffer
+
+        const crossSectionVertices = generateCrossSectionVertices(rgbA, rgbB, 40);
+        const crossSectionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, crossSectionBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, crossSectionVertices, gl.STATIC_DRAW);
+
+        const solidPosLoc = gl.getAttribLocation(cubeSolidProgram, 'a_position');
+        gl.enableVertexAttribArray(solidPosLoc);
+        gl.vertexAttribPointer(solidPosLoc, 3, gl.FLOAT, false, 0, 0);
+
+        const solidMatrixLoc = gl.getUniformLocation(cubeSolidProgram, 'u_matrix');
+        gl.uniformMatrix4fv(solidMatrixLoc, false, matrix);
+
+        const clipEnabledLoc = gl.getUniformLocation(cubeSolidProgram, 'u_clipEnabled');
+        const clipToCubeLoc = gl.getUniformLocation(cubeSolidProgram, 'u_clipToCube');
+        gl.uniform1f(clipEnabledLoc, 0.0);
+        gl.uniform1f(clipToCubeLoc, 1.0); // Clip to cube bounds
+
+        gl.drawArrays(gl.TRIANGLES, 0, crossSectionVertices.length / 3);
+        gl.depthMask(true); // Re-enable depth write
+    }
+
+    // Draw points A and B (with depth test - cube can occlude them)
+    gl.enable(gl.BLEND);
+    gl.enable(gl.DEPTH_TEST);
+    gl.useProgram(cubePointProgram);
+
+    const rgbT = [
+        rgbA[0] + (rgbB[0] - rgbA[0]) * t,
+        rgbA[1] + (rgbB[1] - rgbA[1]) * t,
+        rgbA[2] + (rgbB[2] - rgbA[2]) * t
+    ];
+
+    const pointPosLoc = gl.getAttribLocation(cubePointProgram, 'a_position');
+    const pointColorLoc = gl.getAttribLocation(cubePointProgram, 'a_color');
+    const pointSizeLoc = gl.getAttribLocation(cubePointProgram, 'a_size');
+    const pointGlowLoc = gl.getAttribLocation(cubePointProgram, 'a_hasGlow');
+    const pointMatrixLoc = gl.getUniformLocation(cubePointProgram, 'u_matrix');
+
+    // Points A and B (with depth test)
+    const pointsAB_Positions = [...rgbA, ...rgbB];
+    const pointsAB_Colors = [...rgbA, ...rgbB];
+    const pointsAB_Sizes = [20.0 * dpr, 20.0 * dpr];
+    const pointsAB_Glows = [0.0, 0.0];
+
+    const abPosBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, abPosBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pointsAB_Positions), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(pointPosLoc);
+    gl.vertexAttribPointer(pointPosLoc, 3, gl.FLOAT, false, 0, 0);
+
+    const abColorBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, abColorBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pointsAB_Colors), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(pointColorLoc);
+    gl.vertexAttribPointer(pointColorLoc, 3, gl.FLOAT, false, 0, 0);
+
+    const abSizeBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, abSizeBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pointsAB_Sizes), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(pointSizeLoc);
+    gl.vertexAttribPointer(pointSizeLoc, 1, gl.FLOAT, false, 0, 0);
+
+    const abGlowBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, abGlowBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pointsAB_Glows), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(pointGlowLoc);
+    gl.vertexAttribPointer(pointGlowLoc, 1, gl.FLOAT, false, 0, 0);
+
+    gl.uniformMatrix4fv(pointMatrixLoc, false, matrix);
+    gl.drawArrays(gl.POINTS, 0, 2);
+
+    // Point T (depth test ON - cube can occlude)
+    const tPosBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, tPosBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(rgbT), gl.STATIC_DRAW);
+    gl.vertexAttribPointer(pointPosLoc, 3, gl.FLOAT, false, 0, 0);
+
+    const tColorBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, tColorBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(rgbT), gl.STATIC_DRAW);
+    gl.vertexAttribPointer(pointColorLoc, 3, gl.FLOAT, false, 0, 0);
+
+    const tSizeBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, tSizeBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([25.0 * dpr]), gl.STATIC_DRAW);
+    gl.vertexAttribPointer(pointSizeLoc, 1, gl.FLOAT, false, 0, 0);
+
+    const tGlowBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, tGlowBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([1.0]), gl.STATIC_DRAW);
+    gl.vertexAttribPointer(pointGlowLoc, 1, gl.FLOAT, false, 0, 0);
+
+    gl.drawArrays(gl.POINTS, 0, 1);
 }
 
 // Cube mouse/touch rotation handlers
@@ -1160,18 +1469,38 @@ document.addEventListener('mouseup', () => {
     cubeCanvas.style.cursor = 'grab';
 });
 
-// Touch support for cube rotation
+// Scroll wheel zoom for desktop
+cubeCanvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const zoomSpeed = 0.001;
+    cubeZoom += e.deltaY * zoomSpeed * cubeZoom; // Proportional zoom
+    cubeZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, cubeZoom));
+    renderCube();
+}, { passive: false });
+
+// Helper to get distance between two touch points
+function getPinchDistance(touches) {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+}
+
+// Touch support for cube rotation and pinch zoom
 cubeCanvas.addEventListener('touchstart', (e) => {
     if (e.touches.length === 1) {
         isDraggingCube = true;
         lastCubeMouseX = e.touches[0].clientX;
         lastCubeMouseY = e.touches[0].clientY;
         e.preventDefault();
+    } else if (e.touches.length === 2) {
+        isDraggingCube = false;
+        lastPinchDistance = getPinchDistance(e.touches);
+        e.preventDefault();
     }
 }, { passive: false });
 
 document.addEventListener('touchmove', (e) => {
-    if (isDraggingCube && e.touches.length === 1) {
+    if (e.touches.length === 1 && isDraggingCube) {
         const dx = e.touches[0].clientX - lastCubeMouseX;
         const dy = e.touches[0].clientY - lastCubeMouseY;
         cubeRotationY += dx * 0.01;
@@ -1179,11 +1508,24 @@ document.addEventListener('touchmove', (e) => {
         lastCubeMouseX = e.touches[0].clientX;
         lastCubeMouseY = e.touches[0].clientY;
         renderCube();
+    } else if (e.touches.length === 2) {
+        const currentDistance = getPinchDistance(e.touches);
+        const delta = lastPinchDistance - currentDistance;
+        const zoomSpeed = 0.02;
+        cubeZoom += delta * zoomSpeed;
+        cubeZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, cubeZoom));
+        lastPinchDistance = currentDistance;
+        renderCube();
     }
 }, { passive: false });
 
-document.addEventListener('touchend', () => {
-    isDraggingCube = false;
+document.addEventListener('touchend', (e) => {
+    if (e.touches.length < 2) {
+        lastPinchDistance = 0;
+    }
+    if (e.touches.length === 0) {
+        isDraggingCube = false;
+    }
 });
 
 // Modify the existing update function to also render the cube
@@ -1196,3 +1538,583 @@ update = function() {
 // Initialize and render cube
 initCube();
 renderCube();
+
+// ============================================
+// 3D HSV Cylinder Visualization
+// ============================================
+
+const cylinderCanvas = document.getElementById('cylinderCanvas');
+let cylinderGl, cylinderProgram, cylinderPointProgram, cylinderSolidProgram;
+let cylinderRotationX = -0.5;
+let cylinderRotationY = 0.8;
+let cylinderZoom = 3.5;
+let isDraggingCylinder = false;
+let lastCylinderMouseX, lastCylinderMouseY;
+let lastCylinderPinchDistance = 0;
+
+function initCylinder() {
+    cylinderGl = cylinderCanvas.getContext('webgl');
+    if (!cylinderGl) {
+        console.error('WebGL not supported for cylinder');
+        return;
+    }
+
+    // Line shader (same as cube)
+    const lineVS = `
+        attribute vec3 a_position;
+        attribute vec3 a_color;
+        uniform mat4 u_matrix;
+        varying vec3 v_color;
+        void main() {
+            gl_Position = u_matrix * vec4(a_position, 1.0);
+            v_color = a_color;
+        }
+    `;
+
+    const lineFS = `
+        precision mediump float;
+        varying vec3 v_color;
+        void main() {
+            gl_FragColor = vec4(v_color, 1.0);
+        }
+    `;
+
+    // Point shader with optional white glow
+    const pointVS = `
+        attribute vec3 a_position;
+        attribute vec3 a_color;
+        attribute float a_size;
+        attribute float a_hasGlow;
+        uniform mat4 u_matrix;
+        varying vec3 v_color;
+        varying float v_hasGlow;
+        void main() {
+            gl_Position = u_matrix * vec4(a_position, 1.0);
+            gl_PointSize = a_size;
+            v_color = a_color;
+            v_hasGlow = a_hasGlow;
+        }
+    `;
+
+    const pointFS = `
+        precision mediump float;
+        varying vec3 v_color;
+        varying float v_hasGlow;
+        void main() {
+            float dist = length(gl_PointCoord - vec2(0.5));
+            if (dist > 0.5) discard;
+
+            float alpha = smoothstep(0.5, 0.35, dist);
+            vec3 finalColor = v_color;
+
+            if (v_hasGlow > 0.5) {
+                float ringCenter = 0.42;
+                float ringWidth = 0.08;
+                float glowStrength = 1.0 - smoothstep(0.0, ringWidth, abs(dist - ringCenter));
+                glowStrength *= 0.5;
+                finalColor = mix(v_color, vec3(1.0), glowStrength);
+            }
+
+            gl_FragColor = vec4(finalColor, alpha);
+        }
+    `;
+
+    // Solid cylinder shader - position maps to HSV color
+    const solidCylinderVS = `
+        attribute vec3 a_position;
+        uniform mat4 u_matrix;
+        varying vec3 v_color;
+        varying vec3 v_position;
+        void main() {
+            gl_Position = u_matrix * vec4(a_position, 1.0);
+            v_position = a_position;
+
+            // Convert cylinder position to HSV color
+            // x, z are in range [-0.5, 0.5], y is in range [0, 1]
+            float hue = fract(atan(a_position.z, a_position.x) / (2.0 * 3.14159265));
+            float sat = length(vec2(a_position.x, a_position.z)) * 2.0; // radius 0.5 -> sat 1
+            float val = a_position.y; // y from 0 to 1
+
+            // HSV to RGB conversion
+            vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+            vec3 p = abs(fract(vec3(hue) + K.xyz) * 6.0 - K.www);
+            v_color = val * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), sat);
+        }
+    `;
+
+    const solidCylinderFS = `
+        precision mediump float;
+        varying vec3 v_color;
+        varying vec3 v_position;
+        uniform vec3 u_planePoint;
+        uniform vec3 u_planeNormal;
+        uniform float u_clipEnabled;
+        void main() {
+            if (u_clipEnabled > 0.5) {
+                float dist = dot(v_position - u_planePoint, u_planeNormal);
+                if (dist > 0.0) discard;
+            }
+            gl_FragColor = vec4(v_color, 1.0);
+        }
+    `;
+
+    function compileShader(gl, type, source) {
+        const shader = gl.createShader(type);
+        gl.shaderSource(shader, source);
+        gl.compileShader(shader);
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+            console.error(gl.getShaderInfoLog(shader));
+            return null;
+        }
+        return shader;
+    }
+
+    function createProgramCyl(gl, vs, fs) {
+        const program = gl.createProgram();
+        gl.attachShader(program, compileShader(gl, gl.VERTEX_SHADER, vs));
+        gl.attachShader(program, compileShader(gl, gl.FRAGMENT_SHADER, fs));
+        gl.linkProgram(program);
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+            console.error(gl.getProgramInfoLog(program));
+            return null;
+        }
+        return program;
+    }
+
+    cylinderProgram = createProgramCyl(cylinderGl, lineVS, lineFS);
+    cylinderPointProgram = createProgramCyl(cylinderGl, pointVS, pointFS);
+    cylinderSolidProgram = createProgramCyl(cylinderGl, solidCylinderVS, solidCylinderFS);
+
+    cylinderGl.enable(cylinderGl.BLEND);
+    cylinderGl.blendFunc(cylinderGl.SRC_ALPHA, cylinderGl.ONE_MINUS_SRC_ALPHA);
+}
+
+// Generate cylinder side surface vertices
+function generateCylinderVertices(segments, rings) {
+    const vertices = [];
+    const radius = 0.5;
+
+    for (let ring = 0; ring < rings; ring++) {
+        for (let seg = 0; seg < segments; seg++) {
+            const y0 = ring / rings;
+            const y1 = (ring + 1) / rings;
+
+            const angle0 = (seg / segments) * Math.PI * 2;
+            const angle1 = ((seg + 1) / segments) * Math.PI * 2;
+
+            const x0 = Math.cos(angle0) * radius;
+            const z0 = Math.sin(angle0) * radius;
+            const x1 = Math.cos(angle1) * radius;
+            const z1 = Math.sin(angle1) * radius;
+
+            // Two triangles per quad
+            vertices.push(x0, y0, z0, x1, y0, z1, x0, y1, z0);
+            vertices.push(x1, y0, z1, x1, y1, z1, x0, y1, z0);
+        }
+    }
+
+    return new Float32Array(vertices);
+}
+
+// Generate cylinder top and bottom caps
+function generateCylinderCaps(segments) {
+    const vertices = [];
+    const radius = 0.5;
+
+    // Top cap (y = 1)
+    for (let seg = 0; seg < segments; seg++) {
+        const angle0 = (seg / segments) * Math.PI * 2;
+        const angle1 = ((seg + 1) / segments) * Math.PI * 2;
+
+        const x0 = Math.cos(angle0) * radius;
+        const z0 = Math.sin(angle0) * radius;
+        const x1 = Math.cos(angle1) * radius;
+        const z1 = Math.sin(angle1) * radius;
+
+        vertices.push(0, 1, 0, x0, 1, z0, x1, 1, z1);
+    }
+
+    // Bottom cap (y = 0)
+    for (let seg = 0; seg < segments; seg++) {
+        const angle0 = (seg / segments) * Math.PI * 2;
+        const angle1 = ((seg + 1) / segments) * Math.PI * 2;
+
+        const x0 = Math.cos(angle0) * radius;
+        const z0 = Math.sin(angle0) * radius;
+        const x1 = Math.cos(angle1) * radius;
+        const z1 = Math.sin(angle1) * radius;
+
+        vertices.push(0, 0, 0, x1, 0, z1, x0, 0, z0);
+    }
+
+    return new Float32Array(vertices);
+}
+
+// Generate cylinder wireframe edges
+function generateCylinderWireframe(segments) {
+    const edges = [];
+    const radius = 0.5;
+
+    // Vertical edges
+    for (let seg = 0; seg < segments; seg += segments / 8) {
+        const angle = (seg / segments) * Math.PI * 2;
+        const x = Math.cos(angle) * radius;
+        const z = Math.sin(angle) * radius;
+        edges.push(x, 0, z, x, 1, z);
+    }
+
+    // Top and bottom rings
+    for (let seg = 0; seg < segments; seg++) {
+        const angle0 = (seg / segments) * Math.PI * 2;
+        const angle1 = ((seg + 1) / segments) * Math.PI * 2;
+
+        const x0 = Math.cos(angle0) * radius;
+        const z0 = Math.sin(angle0) * radius;
+        const x1 = Math.cos(angle1) * radius;
+        const z1 = Math.sin(angle1) * radius;
+
+        // Top ring
+        edges.push(x0, 1, z0, x1, 1, z1);
+        // Bottom ring
+        edges.push(x0, 0, z0, x1, 0, z1);
+    }
+
+    return edges;
+}
+
+// Convert HSV to cylinder position (x, y, z)
+function hsvToCylinderPos(h, s, v) {
+    const radius = 0.5;
+    const angle = h * Math.PI * 2;
+    return [
+        Math.cos(angle) * s * radius,
+        v,
+        Math.sin(angle) * s * radius
+    ];
+}
+
+function renderCylinder() {
+    if (!cylinderGl) return;
+
+    const gl = cylinderGl;
+    const rect = cylinderCanvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    cylinderCanvas.width = rect.width * dpr;
+    cylinderCanvas.height = rect.height * dpr;
+    gl.viewport(0, 0, cylinderCanvas.width, cylinderCanvas.height);
+
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.LEQUAL);
+
+    gl.clearColor(0.043, 0.051, 0.063, 1.0);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    // Build transformation matrix
+    const aspect = cylinderCanvas.width / cylinderCanvas.height;
+    const proj = perspectiveMatrix(Math.PI / 4, aspect, 0.1, 100);
+    const view = translationMatrix(0, 0, -cylinderZoom);
+    const rotX = rotationXMatrix(cylinderRotationX);
+    const rotY = rotationYMatrix(cylinderRotationY);
+    const center = translationMatrix(0, -0.5, 0); // Center vertically
+
+    let matrix = multiplyMatrices(proj, view);
+    matrix = multiplyMatrices(matrix, rotY);
+    matrix = multiplyMatrices(matrix, rotX);
+    matrix = multiplyMatrices(matrix, center);
+
+    // Get HSV values for A and B
+    const hsvA = rgb2hsv(colorA[0], colorA[1], colorA[2]);
+    const hsvB = rgb2hsv(colorB[0], colorB[1], colorB[2]);
+
+    // Draw solid cylinder (no clipping - HSV arc stays on surface, no muddy middle to reveal)
+    gl.disable(gl.BLEND);
+    if (cylinderSolidProgram) {
+        gl.useProgram(cylinderSolidProgram);
+
+        // Draw cylinder sides
+        const sideVertices = generateCylinderVertices(64, 32);
+        const sideBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, sideBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, sideVertices, gl.STATIC_DRAW);
+
+        const solidPosLoc = gl.getAttribLocation(cylinderSolidProgram, 'a_position');
+        gl.enableVertexAttribArray(solidPosLoc);
+        gl.vertexAttribPointer(solidPosLoc, 3, gl.FLOAT, false, 0, 0);
+
+        const solidMatrixLoc = gl.getUniformLocation(cylinderSolidProgram, 'u_matrix');
+        gl.uniformMatrix4fv(solidMatrixLoc, false, matrix);
+
+        const clipEnabledLoc = gl.getUniformLocation(cylinderSolidProgram, 'u_clipEnabled');
+        gl.uniform1f(clipEnabledLoc, 0.0); // No clipping
+
+        gl.drawArrays(gl.TRIANGLES, 0, sideVertices.length / 3);
+
+        // Draw caps
+        const capVertices = generateCylinderCaps(64);
+        const capBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, capBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, capVertices, gl.STATIC_DRAW);
+        gl.vertexAttribPointer(solidPosLoc, 3, gl.FLOAT, false, 0, 0);
+
+        gl.drawArrays(gl.TRIANGLES, 0, capVertices.length / 3);
+    }
+
+    // Draw wireframe
+    gl.useProgram(cylinderProgram);
+
+    const wireframeEdges = generateCylinderWireframe(64);
+    const wireframeColors = [];
+    for (let i = 0; i < wireframeEdges.length; i += 3) {
+        // Color based on position (HSV)
+        const x = wireframeEdges[i];
+        const y = wireframeEdges[i + 1];
+        const z = wireframeEdges[i + 2];
+        let hue = Math.atan2(z, x) / (2 * Math.PI);
+        if (hue < 0) hue += 1;
+        const sat = Math.sqrt(x * x + z * z) * 2;
+        const val = y;
+        const rgb = hsv2rgb(hue, sat, val);
+        wireframeColors.push(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255);
+    }
+
+    const posBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(wireframeEdges), gl.STATIC_DRAW);
+
+    const posLoc = gl.getAttribLocation(cylinderProgram, 'a_position');
+    const colorLoc = gl.getAttribLocation(cylinderProgram, 'a_color');
+    const matrixLoc = gl.getUniformLocation(cylinderProgram, 'u_matrix');
+
+    gl.enableVertexAttribArray(posLoc);
+    gl.vertexAttribPointer(posLoc, 3, gl.FLOAT, false, 0, 0);
+
+    const colorBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(wireframeColors), gl.STATIC_DRAW);
+
+    gl.enableVertexAttribArray(colorLoc);
+    gl.vertexAttribPointer(colorLoc, 3, gl.FLOAT, false, 0, 0);
+
+    gl.uniformMatrix4fv(matrixLoc, false, matrix);
+    gl.drawArrays(gl.LINES, 0, wireframeEdges.length / 3);
+
+    // Draw arc line from A to B
+    gl.depthMask(false);
+
+    let hueA = hsvA[0];
+    let hueB = hsvB[0];
+
+    if (hueDirection === 'shortest') {
+        const hueDiff = hueB - hueA;
+        if (hueDiff > 0.5) hueA += 1;
+        else if (hueDiff < -0.5) hueB += 1;
+    } else if (hueDirection === 'clockwise') {
+        if (hueB >= hueA) hueA += 1;
+    } else if (hueDirection === 'counter') {
+        if (hueB <= hueA) hueB += 1;
+    }
+
+    const arcSegments = 64;
+    const arcPositions = [];
+    const arcColors = [];
+
+    for (let i = 0; i <= arcSegments; i++) {
+        const t = i / arcSegments;
+        const h = (hueA + (hueB - hueA) * t) % 1;
+        const s = hsvA[1] + (hsvB[1] - hsvA[1]) * t;
+        const v = hsvA[2] + (hsvB[2] - hsvA[2]) * t;
+
+        const pos = hsvToCylinderPos(h < 0 ? h + 1 : h, s, v);
+        arcPositions.push(...pos);
+
+        const rgb = hsv2rgb(h < 0 ? h + 1 : h, s, v);
+        arcColors.push(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255);
+    }
+
+    const arcPosBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, arcPosBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(arcPositions), gl.STATIC_DRAW);
+    gl.vertexAttribPointer(posLoc, 3, gl.FLOAT, false, 0, 0);
+
+    const arcColorBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, arcColorBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(arcColors), gl.STATIC_DRAW);
+    gl.vertexAttribPointer(colorLoc, 3, gl.FLOAT, false, 0, 0);
+
+    gl.lineWidth(3.0);
+    gl.drawArrays(gl.LINE_STRIP, 0, arcSegments + 1);
+    gl.depthMask(true);
+
+    // Note: No cross-section plane for HSV cylinder - the arc stays on the surface
+    // (unlike RGB cube where the line cuts through the muddy interior)
+
+    // Draw points A, B, T
+    gl.enable(gl.BLEND);
+    gl.useProgram(cylinderPointProgram);
+
+    const posA = hsvToCylinderPos(hsvA[0], hsvA[1], hsvA[2]);
+    const posB = hsvToCylinderPos(hsvB[0], hsvB[1], hsvB[2]);
+
+    // Interpolated T position
+    const tHue = (hueA + (hueB - hueA) * t) % 1;
+    const tSat = hsvA[1] + (hsvB[1] - hsvA[1]) * t;
+    const tVal = hsvA[2] + (hsvB[2] - hsvA[2]) * t;
+    const posT = hsvToCylinderPos(tHue < 0 ? tHue + 1 : tHue, tSat, tVal);
+
+    const rgbA = [colorA[0] / 255, colorA[1] / 255, colorA[2] / 255];
+    const rgbB = [colorB[0] / 255, colorB[1] / 255, colorB[2] / 255];
+    const rgbT_color = hsv2rgb(tHue < 0 ? tHue + 1 : tHue, tSat, tVal);
+    const rgbT = [rgbT_color[0] / 255, rgbT_color[1] / 255, rgbT_color[2] / 255];
+
+    const pointPosLoc = gl.getAttribLocation(cylinderPointProgram, 'a_position');
+    const pointColorLoc = gl.getAttribLocation(cylinderPointProgram, 'a_color');
+    const pointSizeLoc = gl.getAttribLocation(cylinderPointProgram, 'a_size');
+    const pointGlowLoc = gl.getAttribLocation(cylinderPointProgram, 'a_hasGlow');
+    const pointMatrixLoc = gl.getUniformLocation(cylinderPointProgram, 'u_matrix');
+
+    // Points A and B
+    const pointsAB_Positions = [...posA, ...posB];
+    const pointsAB_Colors = [...rgbA, ...rgbB];
+    const pointsAB_Sizes = [20.0 * dpr, 20.0 * dpr];
+    const pointsAB_Glows = [0.0, 0.0];
+
+    const abPosBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, abPosBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pointsAB_Positions), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(pointPosLoc);
+    gl.vertexAttribPointer(pointPosLoc, 3, gl.FLOAT, false, 0, 0);
+
+    const abColorBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, abColorBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pointsAB_Colors), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(pointColorLoc);
+    gl.vertexAttribPointer(pointColorLoc, 3, gl.FLOAT, false, 0, 0);
+
+    const abSizeBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, abSizeBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pointsAB_Sizes), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(pointSizeLoc);
+    gl.vertexAttribPointer(pointSizeLoc, 1, gl.FLOAT, false, 0, 0);
+
+    const abGlowBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, abGlowBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pointsAB_Glows), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(pointGlowLoc);
+    gl.vertexAttribPointer(pointGlowLoc, 1, gl.FLOAT, false, 0, 0);
+
+    gl.uniformMatrix4fv(pointMatrixLoc, false, matrix);
+    gl.drawArrays(gl.POINTS, 0, 2);
+
+    // Point T with glow
+    const tPosBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, tPosBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(posT), gl.STATIC_DRAW);
+    gl.vertexAttribPointer(pointPosLoc, 3, gl.FLOAT, false, 0, 0);
+
+    const tColorBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, tColorBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(rgbT), gl.STATIC_DRAW);
+    gl.vertexAttribPointer(pointColorLoc, 3, gl.FLOAT, false, 0, 0);
+
+    const tSizeBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, tSizeBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([25.0 * dpr]), gl.STATIC_DRAW);
+    gl.vertexAttribPointer(pointSizeLoc, 1, gl.FLOAT, false, 0, 0);
+
+    const tGlowBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, tGlowBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([1.0]), gl.STATIC_DRAW);
+    gl.vertexAttribPointer(pointGlowLoc, 1, gl.FLOAT, false, 0, 0);
+
+    gl.drawArrays(gl.POINTS, 0, 1);
+}
+
+// Cylinder mouse/touch rotation handlers
+cylinderCanvas.addEventListener('mousedown', (e) => {
+    isDraggingCylinder = true;
+    lastCylinderMouseX = e.clientX;
+    lastCylinderMouseY = e.clientY;
+    cylinderCanvas.style.cursor = 'grabbing';
+});
+
+document.addEventListener('mousemove', (e) => {
+    if (isDraggingCylinder) {
+        const dx = e.clientX - lastCylinderMouseX;
+        const dy = e.clientY - lastCylinderMouseY;
+        cylinderRotationY += dx * 0.01;
+        cylinderRotationX += dy * 0.01;
+        lastCylinderMouseX = e.clientX;
+        lastCylinderMouseY = e.clientY;
+        renderCylinder();
+    }
+});
+
+document.addEventListener('mouseup', () => {
+    if (isDraggingCylinder) {
+        isDraggingCylinder = false;
+        cylinderCanvas.style.cursor = 'grab';
+    }
+});
+
+// Scroll wheel zoom for cylinder
+cylinderCanvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const zoomSpeed = 0.001;
+    cylinderZoom += e.deltaY * zoomSpeed * cylinderZoom;
+    cylinderZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, cylinderZoom));
+    renderCylinder();
+}, { passive: false });
+
+// Touch support for cylinder rotation and pinch zoom
+cylinderCanvas.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 1) {
+        isDraggingCylinder = true;
+        lastCylinderMouseX = e.touches[0].clientX;
+        lastCylinderMouseY = e.touches[0].clientY;
+        e.preventDefault();
+    } else if (e.touches.length === 2) {
+        isDraggingCylinder = false;
+        lastCylinderPinchDistance = getPinchDistance(e.touches);
+        e.preventDefault();
+    }
+}, { passive: false });
+
+document.addEventListener('touchmove', (e) => {
+    if (e.touches.length === 1 && isDraggingCylinder) {
+        const dx = e.touches[0].clientX - lastCylinderMouseX;
+        const dy = e.touches[0].clientY - lastCylinderMouseY;
+        cylinderRotationY += dx * 0.01;
+        cylinderRotationX += dy * 0.01;
+        lastCylinderMouseX = e.touches[0].clientX;
+        lastCylinderMouseY = e.touches[0].clientY;
+        renderCylinder();
+    } else if (e.touches.length === 2 && lastCylinderPinchDistance > 0) {
+        const currentDistance = getPinchDistance(e.touches);
+        const delta = lastCylinderPinchDistance - currentDistance;
+        const zoomSpeed = 0.02;
+        cylinderZoom += delta * zoomSpeed;
+        cylinderZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, cylinderZoom));
+        lastCylinderPinchDistance = currentDistance;
+        renderCylinder();
+    }
+}, { passive: false });
+
+document.addEventListener('touchend', (e) => {
+    if (e.touches.length < 2) {
+        lastCylinderPinchDistance = 0;
+    }
+    if (e.touches.length === 0) {
+        isDraggingCylinder = false;
+    }
+});
+
+// Hook cylinder rendering into the update function
+const originalUpdateWithCube = update;
+update = function() {
+    originalUpdateWithCube();
+    renderCylinder();
+};
+
+// Initialize and render cylinder
+initCylinder();
+renderCylinder();
