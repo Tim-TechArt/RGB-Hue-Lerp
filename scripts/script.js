@@ -476,7 +476,7 @@ function update() {
     hsvBlendRgb.textContent = rgbToCss(hsvResult);
     hsvBlendHsv.textContent = hsvToCss(hsvResult);
 
-    // Update endpoint swatches (RGB and HSV values)
+    // Update endpoint swatches and values
     swatchA.style.backgroundColor = rgbToCss(colorA);
     swatchB.style.backgroundColor = rgbToCss(colorB);
     rgbADisplay.textContent = rgbToCss(colorA);
