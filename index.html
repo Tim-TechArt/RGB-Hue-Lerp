@@ -19,33 +19,29 @@
                 <div class="canvas-container">
                     <canvas id="rgbCanvas" width="800" height="800"></canvas>
                 </div>
-                <div class="color-result">
-                    <div class="label">Current Color</div>
-                    <div class="color-swatch" id="rgbSwatch"></div>
-                    <div class="color-info">
-                        <div id="rgbValue">rgb(255, 0, 0)</div>
-                        <div class="hsv" id="rgbValueHsv">hsv(0, 100%, 100%)</div>
-                    </div>
-                </div>
             </div>
 
             <div class="wheel-card">
-                <h2 class="wheel-title hsv">Hue Lerp</h2>
-                <div class="canvas-container">
-                    <canvas id="hsvCanvas" width="800" height="800"></canvas>
-                </div>
-                <div class="color-result">
-                    <div class="label">Current Color</div>
-                    <div class="color-swatch" id="hsvSwatch"></div>
-                    <div class="color-info">
-                        <div id="hsvValue">rgb(255, 0, 0)</div>
-                        <div class="hsv" id="hsvValueHsv">hsv(0, 100%, 100%)</div>
+                <div class="wheel-title-row">
+                    <h2 class="wheel-title hsv">Hue Lerp</h2>
+                    <div class="settings-dropdown">
+                        <button class="settings-btn" id="hueSettingsBtn" aria-label="Hue direction settings">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                                <line x1="4" y1="6" x2="20" y2="6"></line>
+                                <line x1="4" y1="12" x2="20" y2="12"></line>
+                                <line x1="4" y1="18" x2="20" y2="18"></line>
+                            </svg>
+                        </button>
+                        <div class="settings-menu" id="hueSettingsMenu">
+                            <div class="settings-menu-title">Hue Direction</div>
+                            <label><input type="radio" name="hueDirection" value="shortest" checked> Shortest</label>
+                            <label><input type="radio" name="hueDirection" value="clockwise"> Clockwise</label>
+                            <label><input type="radio" name="hueDirection" value="counter"> Counter-clockwise</label>
+                        </div>
                     </div>
                 </div>
-                <div class="hue-direction-controls">
-                    <label><input type="radio" name="hueDirection" value="shortest" checked> Shortest</label>
-                    <label><input type="radio" name="hueDirection" value="clockwise"> Clockwise</label>
-                    <label><input type="radio" name="hueDirection" value="counter"> Counter-clockwise</label>
+                <div class="canvas-container">
+                    <canvas id="hsvCanvas" width="800" height="800"></canvas>
                 </div>
             </div>
         </div>
@@ -108,8 +104,20 @@
             </div>
 
             <div class="slider-container">
-                <div class="slider-value" id="tValue">0.50</div>
+                <div class="blend-swatch-row">
+                    <div class="blend-info blend-info-left">
+                        <div class="blend-value" id="rgbBlendRgb">rgb(128, 128, 128)</div>
+                        <div class="blend-value hsv" id="rgbBlendHsv">hsv(0, 0%, 50%)</div>
+                    </div>
+                    <div class="blend-swatch" id="rgbBlendSwatch" title="RGB Blend"></div>
+                    <div class="blend-swatch" id="hsvBlendSwatch" title="HSV Blend"></div>
+                    <div class="blend-info blend-info-right">
+                        <div class="blend-value" id="hsvBlendRgb">rgb(128, 128, 128)</div>
+                        <div class="blend-value hsv" id="hsvBlendHsv">hsv(0, 0%, 50%)</div>
+                    </div>
+                </div>
                 <input type="range" id="tSlider" min="0" max="1" step="0.01" value="0.5">
+                <div class="slider-value" id="tValue">0.50</div>
             </div>
 
             <div class="color-endpoint color-endpoint-b">

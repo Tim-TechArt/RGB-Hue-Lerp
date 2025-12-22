@@ -81,14 +81,14 @@ function lerpHSV(colorA, colorB, t) {
             }
         }
     } else if (hueDirection === 'clockwise') {
-        // Always go clockwise (decreasing hue)
-        if (hueB >= hueA) {
-            hueA += 1;
-        }
-    } else if (hueDirection === 'counter') {
-        // Always go counter-clockwise (increasing hue)
+        // Always go clockwise (increasing hue on our wheel)
         if (hueB <= hueA) {
             hueB += 1;
+        }
+    } else if (hueDirection === 'counter') {
+        // Always go counter-clockwise (decreasing hue on our wheel)
+        if (hueB >= hueA) {
+            hueA += 1;
         }
     }
 
@@ -218,14 +218,14 @@ const fragmentShaderSource = `
                     hueB += 1.0;
                 }
             } else if (u_hueDirection == 1) {
-                // Clockwise (decreasing hue)
-                if (hueB >= hueA) {
-                    hueA += 1.0;
-                }
-            } else {
-                // Counter-clockwise (increasing hue)
+                // Clockwise (increasing hue on our wheel)
                 if (hueB <= hueA) {
                     hueB += 1.0;
+                }
+            } else {
+                // Counter-clockwise (decreasing hue on our wheel)
+                if (hueB >= hueA) {
+                    hueA += 1.0;
                 }
             }
 
@@ -297,9 +297,11 @@ const fragmentShaderSource = `
                     else hueB2 += 1.0;
                 }
             } else if (u_hueDirection == 1) {
-                if (hueB2 >= hueA2) hueA2 += 1.0;
-            } else {
+                // Clockwise (increasing hue on our wheel)
                 if (hueB2 <= hueA2) hueB2 += 1.0;
+            } else {
+                // Counter-clockwise (decreasing hue on our wheel)
+                if (hueB2 >= hueA2) hueA2 += 1.0;
             }
 
             float h = mod(mix(hueA2, hueB2, u_t), 1.0);
@@ -446,12 +448,12 @@ const rgbBDisplay = document.getElementById('rgbB');
 const hsvADisplay = document.getElementById('hsvA');
 const hsvBDisplay = document.getElementById('hsvB');
 
-const rgbSwatch = document.getElementById('rgbSwatch');
-const hsvSwatch = document.getElementById('hsvSwatch');
-const rgbValue = document.getElementById('rgbValue');
-const hsvValue = document.getElementById('hsvValue');
-const rgbValueHsv = document.getElementById('rgbValueHsv');
-const hsvValueHsv = document.getElementById('hsvValueHsv');
+const rgbBlendSwatch = document.getElementById('rgbBlendSwatch');
+const hsvBlendSwatch = document.getElementById('hsvBlendSwatch');
+const rgbBlendRgb = document.getElementById('rgbBlendRgb');
+const rgbBlendHsv = document.getElementById('rgbBlendHsv');
+const hsvBlendRgb = document.getElementById('hsvBlendRgb');
+const hsvBlendHsv = document.getElementById('hsvBlendHsv');
 
 let colorA = [255, 0, 0];    // Red (hue 0°)
 let colorB = [0, 255, 255];  // Cyan (hue 180°) - opposite side of wheel
@@ -466,13 +468,13 @@ function update() {
     const rgbResult = lerpRGB(colorA, colorB, t);
     const hsvResult = lerpHSV(colorA, colorB, t);
 
-    // Update result swatches (RGB and HSV values)
-    rgbSwatch.style.backgroundColor = rgbToCss(rgbResult);
-    hsvSwatch.style.backgroundColor = rgbToCss(hsvResult);
-    rgbValue.textContent = rgbToCss(rgbResult);
-    hsvValue.textContent = rgbToCss(hsvResult);
-    rgbValueHsv.textContent = hsvToCss(rgbResult);
-    hsvValueHsv.textContent = hsvToCss(hsvResult);
+    // Update blend swatches in slider footer
+    rgbBlendSwatch.style.backgroundColor = rgbToCss(rgbResult);
+    hsvBlendSwatch.style.backgroundColor = rgbToCss(hsvResult);
+    rgbBlendRgb.textContent = rgbToCss(rgbResult);
+    rgbBlendHsv.textContent = hsvToCss(rgbResult);
+    hsvBlendRgb.textContent = rgbToCss(hsvResult);
+    hsvBlendHsv.textContent = hsvToCss(hsvResult);
 
     // Update endpoint swatches (RGB and HSV values)
     swatchA.style.backgroundColor = rgbToCss(colorA);
@@ -548,9 +550,9 @@ function getDotPositions(mode) {
             if (hueDiff > 0.5) hueA += 1;
             else if (hueDiff < -0.5) hueB += 1;
         } else if (hueDirection === 'clockwise') {
-            if (hueB >= hueA) hueA += 1;
-        } else if (hueDirection === 'counter') {
             if (hueB <= hueA) hueB += 1;
+        } else if (hueDirection === 'counter') {
+            if (hueB >= hueA) hueA += 1;
         }
 
         const h = ((hueA + (hueB - hueA) * t) % 1 + 1) % 1;
@@ -626,9 +628,9 @@ function getTFromPosition(canvas, event) {
             if (hueDiff > 0.5) hueA += 1;
             else if (hueDiff < -0.5) hueB += 1;
         } else if (hueDirection === 'clockwise') {
-            if (hueB >= hueA) hueA += 1;
-        } else if (hueDirection === 'counter') {
             if (hueB <= hueA) hueB += 1;
+        } else if (hueDirection === 'counter') {
+            if (hueB >= hueA) hueA += 1;
         }
 
         let pointHue = 0.25 - Math.atan2(y, x) / (2 * Math.PI);
@@ -769,6 +771,24 @@ document.querySelectorAll('input[name="hueDirection"]').forEach(radio => {
         hueDirection = e.target.value;
         update();
     });
+});
+
+// Settings dropdown toggle
+const hueSettingsBtn = document.getElementById('hueSettingsBtn');
+const hueSettingsMenu = document.getElementById('hueSettingsMenu');
+
+hueSettingsBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    hueSettingsMenu.classList.toggle('open');
+    hueSettingsBtn.classList.toggle('active');
+});
+
+// Close dropdown when clicking outside
+document.addEventListener('click', (e) => {
+    if (!hueSettingsMenu.contains(e.target) && !hueSettingsBtn.contains(e.target)) {
+        hueSettingsMenu.classList.remove('open');
+        hueSettingsBtn.classList.remove('active');
+    }
 });
 
 // Handle resize
@@ -1820,9 +1840,9 @@ function renderCylinder() {
         if (hueDiff > 0.5) hueA += 1;
         else if (hueDiff < -0.5) hueB += 1;
     } else if (hueDirection === 'clockwise') {
-        if (hueB >= hueA) hueA += 1;
-    } else if (hueDirection === 'counter') {
         if (hueB <= hueA) hueB += 1;
+    } else if (hueDirection === 'counter') {
+        if (hueB >= hueA) hueA += 1;
     }
 
     // Draw points A, B, T
@@ -1852,7 +1872,7 @@ function renderCylinder() {
     // Points A and B (with glow to stand out on colorful surface)
     const pointsAB_Positions = [...posA, ...posB];
     const pointsAB_Colors = [...rgbA, ...rgbB];
-    const pointsAB_Sizes = [20.0 * dpr, 20.0 * dpr];
+    const pointsAB_Sizes = [30.0 * dpr, 30.0 * dpr];
     const pointsAB_Glows = [1.0, 1.0];
 
     const abPosBuffer = gl.createBuffer();
@@ -1895,7 +1915,7 @@ function renderCylinder() {
 
     const tSizeBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, tSizeBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([25.0 * dpr]), gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([35.0 * dpr]), gl.STATIC_DRAW);
     gl.vertexAttribPointer(pointSizeLoc, 1, gl.FLOAT, false, 0, 0);
 
     const tGlowBuffer = gl.createBuffer();
