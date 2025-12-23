@@ -365,6 +365,10 @@ canvas {
     flex: 1;
 }
 
+.endpoint-value {
+    white-space: pre;
+}
+
 .endpoint-info-a {
     text-align: left;
 }
@@ -379,7 +383,6 @@ canvas {
 }
 
 .endpoint-value.hsv {
-    font-size: 0.75rem;
     margin-top: 2px;
 }
 
@@ -420,6 +423,10 @@ canvas {
     color: var(--gray-text);
 }
 
+.blend-value {
+    white-space: pre;
+}
+
 .blend-info.blend-info-left {
     text-align: right;
 }
@@ -429,7 +436,6 @@ canvas {
 }
 
 .blend-value.hsv {
-    font-size: 0.75rem;
     margin-top: 2px;
 }
 
@@ -486,9 +492,6 @@ canvas {
         font-size: 0.6rem;
     }
 
-    .blend-value.hsv {
-        font-size: 0.5rem;
-    }
 
     .slider-row {
         gap: 8px;
@@ -504,9 +507,6 @@ canvas {
         font-size: 0.6rem;
     }
 
-    .endpoint-value.hsv {
-        font-size: 0.5rem;
-    }
 
     .description {
         font-size: 0.8rem;

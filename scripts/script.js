@@ -110,12 +110,18 @@ function rgbToHex(rgb) {
 }
 
 function rgbToCss(rgb) {
-    return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+    const r = String(rgb[0]).padStart(3, ' ');
+    const g = String(rgb[1]).padStart(3, ' ');
+    const b = String(rgb[2]).padStart(3, ' ');
+    return `rgb(${r}, ${g}, ${b})`;
 }
 
 function hsvToCss(rgb) {
     const [h, s, v] = rgb2hsv(rgb[0], rgb[1], rgb[2]);
-    return `hsv(${Math.round(h * 255)}, ${Math.round(s * 255)}, ${Math.round(v * 255)})`;
+    const hPad = String(Math.round(h * 255)).padStart(3, ' ');
+    const sPad = String(Math.round(s * 255)).padStart(3, ' ');
+    const vPad = String(Math.round(v * 255)).padStart(3, ' ');
+    return `hsv(${hPad}, ${sPad}, ${vPad})`;
 }
 
 // ============================================
