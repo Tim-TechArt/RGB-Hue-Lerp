@@ -67,7 +67,7 @@ body {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 40px;
-    margin-bottom: 20px;
+    margin-bottom: 10px;
     max-width: 100%;
     overflow: hidden;
 }
@@ -84,7 +84,7 @@ body {
     .wheels-container,
     .method-row {
         gap: 10px;
-        margin-bottom: 20px;
+        margin-bottom: 10px;
     }
 
     .wheel-card {
@@ -320,7 +320,7 @@ canvas {
     right: 0;
     background: var(--card-bg);
     border-top: 1px solid rgba(47, 127, 122, 0.2);
-    padding: 1rem 1.5rem;
+    padding: 1rem 1.5rem 0;
     z-index: 1000;
     backdrop-filter: blur(10px);
 }
@@ -329,37 +329,19 @@ canvas {
     max-width: 1200px;
     margin: 0 auto;
     display: flex;
-    align-items: center;
-    gap: 20px;
-}
-
-.endpoint-group {
-    display: flex;
     flex-direction: column;
-    gap: 6px;
-    flex-shrink: 0;
+    align-items: center;
 }
 
-.endpoint-group-a {
-    order: 1;
-    align-items: flex-end;
+.slider-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
 }
 
-.endpoint-group-a .endpoint-info {
-    text-align: right;
-}
-
-.endpoint-group-b {
-    order: 3;
-    align-items: flex-start;
-}
-
-.endpoint-group-b .endpoint-info {
-    text-align: left;
-}
-
-.slider-container {
-    order: 2;
+.slider-row input[type="range"] {
+    flex: 1;
 }
 
 .endpoint-swatch {
@@ -370,10 +352,30 @@ canvas {
     flex-shrink: 0;
 }
 
+.endpoint-values-row {
+    display: flex;
+    align-items: flex-start;
+    width: 100%;
+}
+
 .endpoint-info {
     font-family: 'Courier New', monospace;
     font-size: 0.85rem;
     color: var(--gray-text);
+    flex: 1;
+}
+
+.endpoint-info-a {
+    text-align: left;
+}
+
+.endpoint-info-b {
+    text-align: right;
+}
+
+.endpoint-values-row .slider-value {
+    flex: 0 0 auto;
+    text-align: center;
 }
 
 .endpoint-value.hsv {
@@ -381,17 +383,12 @@ canvas {
     margin-top: 2px;
 }
 
-.slider-container {
-    flex: 1;
-    text-align: center;
-}
-
 .blend-swatch-row {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 12px;
-    margin-bottom: 10px;
+    width: 100%;
+    gap: 4px;
 }
 
 .blend-info-left {
@@ -407,7 +404,6 @@ canvas {
     font-size: 1.5rem;
     font-weight: 600;
     color: var(--teal-bright);
-    margin-top: 8px;
 }
 
 .blend-swatch {
@@ -472,8 +468,7 @@ canvas {
     }
 
     .blend-swatch-row {
-        gap: 8px;
-        margin-bottom: 8px;
+        gap: 4px;
     }
 
     .slider-value {
@@ -495,7 +490,7 @@ canvas {
         font-size: 0.5rem;
     }
 
-    .endpoint-group {
+    .slider-row {
         gap: 8px;
     }
 

@@ -90,34 +90,30 @@
 
     <div class="slider-footer">
         <div class="slider-footer-content">
-            <div class="endpoint-group endpoint-group-a">
+            <div class="blend-swatch-row">
+                <div class="blend-info blend-info-left">
+                    <div class="blend-value" id="rgbBlendRgb">rgb(128, 128, 128)</div>
+                    <div class="blend-value hsv" id="rgbBlendHsv">hsv(0, 0%, 50%)</div>
+                </div>
+                <div class="blend-swatch" id="rgbBlendSwatch" title="RGB Blend"></div>
+                <div class="blend-swatch" id="hsvBlendSwatch" title="HSV Blend"></div>
+                <div class="blend-info blend-info-right">
+                    <div class="blend-value" id="hsvBlendRgb">rgb(128, 128, 128)</div>
+                    <div class="blend-value hsv" id="hsvBlendHsv">hsv(0, 0%, 50%)</div>
+                </div>
+            </div>
+            <div class="slider-row">
                 <div class="endpoint-swatch" id="swatchA" title="Color A"></div>
-                <div class="endpoint-info">
+                <input type="range" id="tSlider" min="0" max="1" step="0.01" value="0.5">
+                <div class="endpoint-swatch" id="swatchB" title="Color B"></div>
+            </div>
+            <div class="endpoint-values-row">
+                <div class="endpoint-info endpoint-info-a">
                     <div class="endpoint-value" id="rgbA">rgb(255, 0, 0)</div>
                     <div class="endpoint-value hsv" id="hsvA">hsv(0, 100%, 100%)</div>
                 </div>
-            </div>
-
-            <div class="slider-container">
-                <div class="blend-swatch-row">
-                    <div class="blend-info blend-info-left">
-                        <div class="blend-value" id="rgbBlendRgb">rgb(128, 128, 128)</div>
-                        <div class="blend-value hsv" id="rgbBlendHsv">hsv(0, 0%, 50%)</div>
-                    </div>
-                    <div class="blend-swatch" id="rgbBlendSwatch" title="RGB Blend"></div>
-                    <div class="blend-swatch" id="hsvBlendSwatch" title="HSV Blend"></div>
-                    <div class="blend-info blend-info-right">
-                        <div class="blend-value" id="hsvBlendRgb">rgb(128, 128, 128)</div>
-                        <div class="blend-value hsv" id="hsvBlendHsv">hsv(0, 0%, 50%)</div>
-                    </div>
-                </div>
-                <input type="range" id="tSlider" min="0" max="1" step="0.01" value="0.5">
                 <div class="slider-value" id="tValue">0.50</div>
-            </div>
-
-            <div class="endpoint-group endpoint-group-b">
-                <div class="endpoint-swatch" id="swatchB" title="Color B"></div>
-                <div class="endpoint-info">
+                <div class="endpoint-info endpoint-info-b">
                     <div class="endpoint-value" id="rgbB">rgb(0, 255, 255)</div>
                     <div class="endpoint-value hsv" id="hsvB">hsv(180, 100%, 100%)</div>
                 </div>
