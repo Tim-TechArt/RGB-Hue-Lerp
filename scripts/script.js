@@ -798,10 +798,39 @@ document.addEventListener('click', (e) => {
 });
 
 // Handle resize
-window.addEventListener('resize', update);
+window.addEventListener('resize', function() {
+    update();
+    renderCube();
+    renderCylinder();
+});
 
-// Shrink header on scroll
-window.addEventListener('scroll', function() {
+// Shrink title to fit on one line
+function fitTitleToWidth(title, maxFontSize) {
+    const containerWidth = window.innerWidth - 40; // 20px padding each side
+
+    // Disable transition during measurement
+    title.style.transition = 'none';
+    title.style.fontSize = maxFontSize + 'rem';
+    void title.offsetWidth; // Force reflow
+
+    // If it fits, we're done
+    if (title.scrollWidth <= containerWidth) {
+        title.style.transition = '';
+        return maxFontSize;
+    }
+
+    // Calculate scale ratio and apply directly
+    const ratio = containerWidth / title.scrollWidth;
+    let fontSize = maxFontSize * ratio * 0.98; // 0.98 for small safety margin
+    fontSize = Math.max(fontSize, 0.5); // Minimum size
+
+    title.style.fontSize = fontSize + 'rem';
+    title.style.transition = '';
+    return fontSize;
+}
+
+// Update header based on scroll and screen size
+function updateHeader() {
     const header = document.querySelector('.header');
     const title = document.querySelector('.title');
     const subtitle = document.querySelector('.subtitle');
@@ -813,11 +842,12 @@ window.addEventListener('scroll', function() {
         header.style.padding = "10px 10px";
         if (isMobile) {
             const baseTitleSize = screenWidth / 180;
-            title.style.fontSize = (baseTitleSize * 0.4) + "rem";
-            subtitle.style.fontSize = (baseTitleSize * 0.3 * 0.6) + "rem";
+            const targetSize = baseTitleSize * 0.4;
+            const actualSize = fitTitleToWidth(title, targetSize);
+            subtitle.style.fontSize = (actualSize * 0.3 / 0.4 * 0.6) + "rem";
         } else {
-            title.style.fontSize = "1.5rem";
-            subtitle.style.fontSize = "0.75rem";
+            const actualSize = fitTitleToWidth(title, 1.5);
+            subtitle.style.fontSize = (actualSize * 0.5) + "rem";
         }
     } else {
         // At top state
@@ -825,18 +855,25 @@ window.addEventListener('scroll', function() {
             const baseTitleSize = screenWidth / 180;
             const basePadding = Math.min(Math.max(screenWidth / 30, 15), 40);
             header.style.padding = basePadding + "px 10px";
-            title.style.fontSize = baseTitleSize + "rem";
-            subtitle.style.fontSize = (baseTitleSize * 0.3) + "rem";
+            const actualSize = fitTitleToWidth(title, baseTitleSize);
+            subtitle.style.fontSize = (actualSize * 0.3) + "rem";
         } else {
             header.style.padding = "40px 10px";
-            title.style.fontSize = "4rem";
-            subtitle.style.fontSize = "1.25rem";
+            const actualSize = fitTitleToWidth(title, 4);
+            subtitle.style.fontSize = (actualSize * 0.3125) + "rem";
         }
     }
-});
+}
+
+// Shrink header on scroll
+window.addEventListener('scroll', updateHeader);
+
+// Update header on resize
+window.addEventListener('resize', updateHeader);
 
 // Initial render
 update();
+updateHeader();
 
 // ============================================
 // 3D RGB Cube Visualization
@@ -847,7 +884,7 @@ let cubeGl, cubeProgram, cubePointProgram, cubeSolidProgram;
 let cubeRotationX = 2.66;
 let cubeRotationY = -3.14;
 let cubeRotationZ = 0;
-let cubeZoom = 2.91; // Camera distance (smaller = closer)
+let cubeZoom = 2.33; // Camera distance (smaller = closer)
 const ZOOM_MIN = 2.0;
 const ZOOM_MAX = 8.0;
 let isDraggingCube = false;
@@ -1185,10 +1222,13 @@ function renderCube() {
     if (!cubeGl) return;
 
     const gl = cubeGl;
-    const rect = cubeCanvas.getBoundingClientRect();
+    // Use rgbCanvas size as reference for consistent sizing
+    const refRect = rgbCanvas.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
-    cubeCanvas.width = rect.width * dpr;
-    cubeCanvas.height = rect.height * dpr;
+    cubeCanvas.width = refRect.width * dpr;
+    cubeCanvas.height = refRect.height * dpr;
+    cubeCanvas.style.width = refRect.width + 'px';
+    cubeCanvas.style.height = refRect.height + 'px';
     gl.viewport(0, 0, cubeCanvas.width, cubeCanvas.height);
 
     // Enable depth testing for proper 3D rendering
@@ -1520,7 +1560,7 @@ let cylinderGl, cylinderProgram, cylinderPointProgram, cylinderSolidProgram;
 let cylinderRotationX = 1.01;
 let cylinderRotationY = 0;
 let cylinderRotationZ = 0;
-let cylinderZoom = 2.5;
+let cylinderZoom = 2.1;
 let isDraggingCylinder = false;
 let lastCylinderMouseX, lastCylinderMouseY;
 let lastCylinderPinchDistance = 0;
@@ -1770,10 +1810,13 @@ function renderCylinder() {
     if (!cylinderGl) return;
 
     const gl = cylinderGl;
-    const rect = cylinderCanvas.getBoundingClientRect();
+    // Use rgbCanvas size as reference for consistent sizing
+    const refRect = rgbCanvas.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
-    cylinderCanvas.width = rect.width * dpr;
-    cylinderCanvas.height = rect.height * dpr;
+    cylinderCanvas.width = refRect.width * dpr;
+    cylinderCanvas.height = refRect.height * dpr;
+    cylinderCanvas.style.width = refRect.width + 'px';
+    cylinderCanvas.style.height = refRect.height + 'px';
     gl.viewport(0, 0, cylinderCanvas.width, cylinderCanvas.height);
 
     gl.enable(gl.DEPTH_TEST);
