@@ -12,7 +12,9 @@
         <p class="subtitle">Blending along lines and arcs - Two different ways to get from A to B</p>
     </div>
     <div class="container">
-
+        <div class="info-card">
+            <p class="tip"><strong>Tip:</strong> Drag the white-ringed dots on the color wheels below to adjust colors A and B</p>
+        </div>
         <div class="wheels-container">
             <div class="wheel-card">
                 <h2 class="wheel-title rgb">RGB Lerp</h2>
@@ -71,17 +73,14 @@
             </div>
         </div>
 
-        <div class="info-card">
-            <p class="tip"><strong>Tip:</strong> Drag the white-ringed dots on the color wheels above to adjust colors A and B</p>
-            <div class="description">
-                <p><strong>RGB interpolation</strong> draws a straight line through the color cube, often passing through desaturated (muddy) colors in the middle.</p>
-                <p style="margin-top: 8px;"><strong>HSV interpolation</strong> travels around the color wheel, keeping saturation and brightness consistent — resulting in more vibrant transitions.</p>
-            </div>
-        </div>
+
 
         <div class="footer">
             <h3>About</h3>
-            <p>RGB and Hue interpolation are two ways to blend between colors. RGB takes a straight line through the color cube — fast but often muddy. Hue interpolation travels around the color wheel, preserving saturation for vibrant gradients.</p>
+			            <div class="description">
+                <p><strong>RGB interpolation</strong> draws a straight line through the color cube, often passing through desaturated (muddy) colors in the middle.</p>
+                <p style="margin-top: 8px;"><strong>HSV interpolation</strong> travels around the color wheel, keeping saturation and brightness consistent — resulting in more vibrant transitions.</p>
+            </div>
             <p class="small"> • Built with WebGL & Vanilla JS • </p>
             <p class="small"><a href="https://github.com/Tim-TechArt/Color-Interpolation">github.com/Tim-TechArt/Color-Interpolation</a></p>
             <p class="small">Tim-TechArt</p>

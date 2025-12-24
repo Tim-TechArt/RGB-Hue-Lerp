@@ -74,6 +74,10 @@ body {
     overflow: hidden;
 }
 
+.wheels-container {
+    padding-top: 2px;
+}
+
 @media (max-width: 800px) {
     body {
         padding: 20px 10px;
@@ -297,15 +301,15 @@ canvas {
 .info-card {
     background: var(--card-bg);
     border-radius: 16px;
-    padding: 30px 30px 12px;
     border: 1px solid rgba(47, 127, 122, 0.2);
-    margin-bottom: 40px;
+    padding: 2px 2px 4px 2px;
+    margin-top: 2px;
 }
 
 .info-card .tip {
     text-align: center;
     color: var(--teal-bright);
-    margin-bottom: 20px;
+    padding: 2px;
 }
 
 /* Fixed slider footer */
@@ -452,13 +456,10 @@ canvas {
 
 @media (max-width: 800px) {
     .info-card {
-        padding: 12px;
-        margin-bottom: 20px;
     }
 
     .info-card .tip {
         font-size: 0.85rem;
-        margin-bottom: 15px;
     }
 
     .slider-footer {
@@ -573,6 +574,10 @@ input[type="range"]::-moz-range-thumb {
 .footer p {
     color: var(--gray-text);
     margin-bottom: 0.5rem;
+}
+
+.footer p:not(.small) {
+    text-align: left;
 }
 
 .footer .small {
