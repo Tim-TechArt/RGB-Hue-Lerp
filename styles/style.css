@@ -37,23 +37,36 @@ body {
 }
 
 .title {
-    font-size: 3rem;
+    font-size: clamp(1.2rem, 6vw, 3rem);
     font-weight: bold;
     background: linear-gradient(to right, var(--teal), var(--orange), var(--rose));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
     margin-bottom: 0.5rem;
-    transition: 0.4s;
+    transition: font-size 0.4s, margin 0.4s;
     letter-spacing: -0.03em;
     white-space: nowrap;
     display: inline-block;
 }
 
 .subtitle {
-    font-size: 0.9rem;
+    font-size: clamp(0.5rem, 2vw, 0.9rem);
     color: var(--gray-text);
-    transition: 0.4s;
+    transition: font-size 0.4s;
+}
+
+/* Scrolled header state */
+.header.scrolled {
+    padding: 10px 10px;
+}
+
+.header.scrolled .title {
+    font-size: clamp(0.9rem, 3vw, 1.5rem);
+}
+
+.header.scrolled .subtitle {
+    font-size: clamp(0.4rem, 1.5vw, 0.7rem);
 }
 
 .container {
@@ -84,7 +97,7 @@ body {
     }
 
     .container {
-        padding-top: 150px;
+        padding-top: 75px;
     }
 
     .wheels-container,
@@ -310,6 +323,8 @@ canvas {
     text-align: center;
     color: var(--teal-bright);
     padding: 2px;
+    font-size: clamp(0.55rem, 2.5vw, 0.9rem);
+    white-space: nowrap;
 }
 
 /* Fixed slider footer */
@@ -455,13 +470,6 @@ canvas {
 }
 
 @media (max-width: 800px) {
-    .info-card {
-    }
-
-    .info-card .tip {
-        font-size: 0.85rem;
-    }
-
     .slider-footer {
         padding: 0.75rem 1rem;
     }
@@ -673,10 +681,6 @@ input[type="range"]::-moz-range-thumb {
 
     .desktop-only {
         display: none;
-    }
-
-    .title {
-        font-size: 1.5rem;
     }
 
     .wheel-title {

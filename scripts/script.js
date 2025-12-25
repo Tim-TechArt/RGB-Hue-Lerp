@@ -804,72 +804,15 @@ window.addEventListener('resize', function() {
     renderCylinder();
 });
 
-// Shrink title to fit on one line
-function fitTitleToWidth(title, maxFontSize) {
-    const containerWidth = window.innerWidth - 40; // 20px padding each side
-
-    // Disable transition during measurement
-    title.style.transition = 'none';
-    title.style.fontSize = maxFontSize + 'rem';
-    void title.offsetWidth; // Force reflow
-
-    // If it fits, we're done
-    if (title.scrollWidth <= containerWidth) {
-        title.style.transition = '';
-        return maxFontSize;
-    }
-
-    // Calculate scale ratio and apply directly
-    const ratio = containerWidth / title.scrollWidth;
-    let fontSize = maxFontSize * ratio * 0.98; // 0.98 for small safety margin
-    fontSize = Math.max(fontSize, 0.5); // Minimum size
-
-    title.style.fontSize = fontSize + 'rem';
-    title.style.transition = '';
-    return fontSize;
-}
-
-// Update header based on scroll and screen size
+// Toggle header scrolled state
 function updateHeader() {
     const header = document.querySelector('.header');
-    const title = document.querySelector('.title');
-    const subtitle = document.querySelector('.subtitle');
-    const screenWidth = window.innerWidth;
-    const isMobile = screenWidth <= 768;
-
-    if (document.body.scrollTop > 50 || document.documentElement.scrollTop > 50) {
-        // Scrolled state
-        header.style.padding = "10px 10px";
-        if (isMobile) {
-            const baseTitleSize = screenWidth / 180;
-            const targetSize = baseTitleSize * 0.4;
-            const actualSize = fitTitleToWidth(title, targetSize);
-            subtitle.style.fontSize = (actualSize * 0.3 / 0.4 * 0.6) + "rem";
-        } else {
-            const actualSize = fitTitleToWidth(title, 1.5);
-            subtitle.style.fontSize = (actualSize * 0.5) + "rem";
-        }
-    } else {
-        // At top state
-        if (isMobile) {
-            const baseTitleSize = screenWidth / 180;
-            const basePadding = Math.min(Math.max(screenWidth / 30, 15), 40);
-            header.style.padding = basePadding + "px 10px";
-            const actualSize = fitTitleToWidth(title, baseTitleSize);
-            subtitle.style.fontSize = (actualSize * 0.3) + "rem";
-        } else {
-            header.style.padding = "40px 10px";
-            const actualSize = fitTitleToWidth(title, 4);
-            subtitle.style.fontSize = (actualSize * 0.3125) + "rem";
-        }
-    }
+    const isScrolled = document.body.scrollTop > 50 || document.documentElement.scrollTop > 50;
+    header.classList.toggle('scrolled', isScrolled);
 }
 
-// Shrink header on scroll
+// Update header on scroll
 window.addEventListener('scroll', updateHeader);
-
-// Update header on resize
-window.addEventListener('resize', updateHeader);
 
 // Initial render
 update();
