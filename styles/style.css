@@ -43,7 +43,6 @@ body {
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    margin-bottom: 0.5rem;
     transition: font-size 0.4s, margin 0.4s;
     letter-spacing: -0.03em;
     white-space: nowrap;
@@ -73,7 +72,7 @@ body {
     max-width: 1200px;
     width: 100%;
     margin: 0 auto;
-    padding-top: 180px;
+    padding-top: 120px;
     box-sizing: border-box;
 }
 
@@ -97,7 +96,7 @@ body {
     }
 
     .container {
-        padding-top: 75px;
+        padding-top: 110px;
     }
 
     .wheels-container,
@@ -146,7 +145,7 @@ body {
     position: relative;
     background: var(--card-bg);
     border-radius: 16px;
-    padding: 30px 30px 12px;
+    padding: 25px 30px 12px;
     border: 1px solid rgba(47, 127, 122, 0.2);
     text-align: left;
     min-width: 0;
@@ -323,7 +322,11 @@ canvas {
     text-align: center;
     color: var(--teal-bright);
     padding: 2px;
-    font-size: clamp(0.55rem, 2.5vw, 0.9rem);
+	padding-left: 6px;
+	padding-right: 6px;
+	margin-left: 6px; 
+	margin-right: 6px; 
+    font-size: clamp(0.15rem, 2.0vw, 0.9rem);
     white-space: nowrap;
 }
 
@@ -623,7 +626,6 @@ input[type="range"]::-moz-range-thumb {
 
 .model-canvas-container {
     position: relative;
-    margin-bottom: 20px;
     display: flex;
     justify-content: center;
 }
@@ -648,6 +650,8 @@ input[type="range"]::-moz-range-thumb {
     display: flex;
     justify-content: center;
     gap: 15px;
+	padding-top: 5px;
+	padding-bottom: 5px;
     margin-top: 8px;
     flex-wrap: wrap;
 }
@@ -697,12 +701,9 @@ input[type="range"]::-moz-range-thumb {
         padding: 12px;
     }
 
-    .model-canvas-container {
-        margin-bottom: 10px;
-    }
-
     .model-hint {
         font-size: 0.65rem;
+		padding-left: 20px;
     }
 
     .footer {

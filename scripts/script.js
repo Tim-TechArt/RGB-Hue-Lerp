@@ -1342,7 +1342,7 @@ function renderCube() {
     const sizeScale = refRect.width / 512;
     const pointsAB_Positions = [...rgbA, ...rgbB];
     const pointsAB_Colors = [...rgbA, ...rgbB];
-    const pointsAB_Sizes = [40.0 * dpr * sizeScale, 40.0 * dpr * sizeScale];
+    const pointsAB_Sizes = [60.0 * dpr * sizeScale, 60.0 * dpr * sizeScale];
     const pointsAB_Glows = [1.0, 1.0];
 
     const abPosBuffer = gl.createBuffer();
@@ -1385,7 +1385,7 @@ function renderCube() {
 
     const tSizeBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, tSizeBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([50.0 * dpr * sizeScale]), gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([70.0 * dpr * sizeScale]), gl.STATIC_DRAW);
     gl.vertexAttribPointer(pointSizeLoc, 1, gl.FLOAT, false, 0, 0);
 
     const tGlowBuffer = gl.createBuffer();
@@ -1502,7 +1502,7 @@ renderCube();
 
 const cylinderCanvas = document.getElementById('cylinderCanvas');
 let cylinderGl, cylinderProgram, cylinderPointProgram, cylinderSolidProgram;
-let cylinderRotationX = 1.01;
+let cylinderRotationX = 0.618;
 let cylinderRotationY = 0;
 let cylinderRotationZ = 0;
 let cylinderZoom = 2.1;
